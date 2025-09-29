@@ -7,7 +7,7 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, updateRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, recalculateAllPortfolios, endRound } from './store/gameState'
+import { subscribe, getState, initializeTeams, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, recalculateAllPortfolios, endRound } from './store/gameState'
 
 function Home() {
   const [gameState, setGameState] = React.useState(getState())
@@ -46,6 +46,7 @@ function Home() {
   function handleSubmitInvestments(e) {
     e.preventDefault()
     if (!currentTeam) return
+    if (gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0) return
     
     const numericInvestments = {}
     let totalInvested = 0
@@ -114,6 +115,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.gold}
                       onChange={e => handleInvestmentChange('gold', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
                     />
                   </div>
                   <div className="investment-item">
@@ -124,6 +126,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.crypto}
                       onChange={e => handleInvestmentChange('crypto', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
                     />
                   </div>
                   <div className="investment-item">
@@ -134,6 +137,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.stocks}
                       onChange={e => handleInvestmentChange('stocks', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
                     />
                   </div>
                   <div className="investment-item">
@@ -144,6 +148,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.realEstate}
                       onChange={e => handleInvestmentChange('realEstate', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
                     />
                   </div>
                   <div className="investment-item">
@@ -154,10 +159,11 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.fd}
                       onChange={e => handleInvestmentChange('fd', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
                     />
                   </div>
                 </div>
-                <button className="primary submit-btn" type="submit">Submit Investments</button>
+                <button className="primary submit-btn" type="submit" disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}>Submit Investments</button>
               </form>
             </div>
           </div>
@@ -298,6 +304,13 @@ function AdminPanel({ onBackToLanding }) {
     updateRound(roundData)
   }
 
+  function handleStartRound() {
+    const roundNum = Number(roundData.round)
+    const durationMin = Number(roundData.duration)
+    if (!roundNum || !durationMin) return
+    startRound({ round: roundNum, duration: durationMin })
+  }
+
   function handleNewsSubmit(e) {
     e.preventDefault()
     addNews(newsData)
@@ -383,6 +396,9 @@ function AdminPanel({ onBackToLanding }) {
               <button type="submit" className="admin-btn">Update Round</button>
             </form>
             <div style={{ marginTop: 16 }}>
+              <button onClick={handleStartRound} className="admin-btn" style={{ background: '#10b981', marginRight: 8 }}>
+                Start Round
+              </button>
               <button onClick={handleEndRound} className="admin-btn" style={{ background: '#ef4444' }}>
                 End Round & Apply Price Changes
         </button>
@@ -398,11 +414,11 @@ function AdminPanel({ onBackToLanding }) {
               </div>
               <div className="status-item">
                 <span className="status-label">Time Remaining:</span>
-                <span className="status-value">4:32</span>
+                <span className="status-value">{formatTime(gameState.timeRemaining)}</span>
               </div>
               <div className="status-item">
                 <span className="status-label">Status:</span>
-                <span className="status-value">{roundData.status}</span>
+                <span className="status-value">{gameState.roundStatus}</span>
               </div>
             </div>
           </div>

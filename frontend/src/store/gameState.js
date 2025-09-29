@@ -4,6 +4,7 @@ let gameState = {
   roundDuration: 6,
   roundStatus: 'active',
   timeRemaining: 360, // seconds
+  roundEndAt: null, // timestamp in ms when the round ends
   news: [
     { id: 1, title: "Market rallies on tech earnings", content: "Technology stocks show strong performance", timestamp: Date.now() - 120000 },
     { id: 2, title: "Bond yields drop amid rate cut hopes", content: "Federal Reserve signals potential rate cuts", timestamp: Date.now() - 300000 }
@@ -60,6 +61,47 @@ function setState(newState) {
   // Persist state so it survives refresh
   try { localStorage.setItem('spend.gameState', JSON.stringify(gameState)) } catch {}
   listeners.forEach(listener => listener(gameState))
+}
+
+// Internal: interval for ticking the timer
+let roundTimerId = null
+
+function clearRoundTimer() {
+  if (roundTimerId) {
+    clearInterval(roundTimerId)
+    roundTimerId = null
+  }
+}
+
+function startRoundTimer() {
+  clearRoundTimer()
+  roundTimerId = setInterval(() => {
+    const now = Date.now()
+    const endAt = gameState.roundEndAt || 0
+    const remainingMs = Math.max(0, endAt - now)
+    const remainingSec = Math.floor(remainingMs / 1000)
+    if (remainingSec <= 0) {
+      clearRoundTimer()
+      setState({ timeRemaining: 0, roundStatus: 'ended' })
+      // Recalculate at end as safeguard (optional: keep using explicit End Round)
+      return
+    }
+    setState({ timeRemaining: remainingSec })
+  }, 1000)
+}
+
+export function startRound(params) {
+  const nextRound = Number(params?.round) || gameState.currentRound
+  const durationMinutes = Number(params?.duration) || gameState.roundDuration
+  const endAt = Date.now() + durationMinutes * 60 * 1000
+  setState({
+    currentRound: nextRound,
+    roundDuration: durationMinutes,
+    roundStatus: 'active',
+    roundEndAt: endAt,
+    timeRemaining: durationMinutes * 60
+  })
+  startRoundTimer()
 }
 
 // Admin actions
