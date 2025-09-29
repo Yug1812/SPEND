@@ -1,4 +1,4 @@
-// Global game state store
+// Global game state store (defaults)
 let gameState = {
   currentRound: 1,
   roundDuration: 6,
@@ -20,6 +20,24 @@ let gameState = {
   roundHistory: [] // Store portfolio values after each round
 }
 
+// Load persisted state from localStorage (if available)
+try {
+  const persisted = JSON.parse(localStorage.getItem('spend.gameState') || 'null')
+  if (persisted && typeof persisted === 'object') {
+    // Merge persisted with defaults to ensure all keys exist
+    gameState = {
+      ...gameState,
+      ...persisted,
+      // Defensive: ensure shapes
+      priceChanges: { ...gameState.priceChanges, ...(persisted.priceChanges || {}) },
+      news: Array.isArray(persisted.news) ? persisted.news : gameState.news,
+      teams: Array.isArray(persisted.teams) ? persisted.teams : gameState.teams,
+      leaderboard: Array.isArray(persisted.leaderboard) ? persisted.leaderboard : gameState.leaderboard,
+      roundHistory: Array.isArray(persisted.roundHistory) ? persisted.roundHistory : gameState.roundHistory
+    }
+  }
+} catch {}
+
 // Listeners for state changes
 let listeners = []
 
@@ -39,6 +57,8 @@ export function getState() {
 // Update state and notify listeners
 function setState(newState) {
   gameState = { ...gameState, ...newState }
+  // Persist state so it survives refresh
+  try { localStorage.setItem('spend.gameState', JSON.stringify(gameState)) } catch {}
   listeners.forEach(listener => listener(gameState))
 }
 
