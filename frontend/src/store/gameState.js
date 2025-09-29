@@ -86,6 +86,11 @@ export function addNews(newsData) {
   })
 }
 
+export function deleteNews(newsId) {
+  const filtered = gameState.news.filter(n => n.id !== newsId)
+  setState({ news: filtered })
+}
+
 export function updatePrices(priceData) {
   setState({
     priceChanges: { ...priceData }

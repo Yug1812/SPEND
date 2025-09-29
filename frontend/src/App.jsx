@@ -7,7 +7,7 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, updateRound, addNews, updatePrices, updateTeamPortfolio, recalculateAllPortfolios, endRound } from './store/gameState'
+import { subscribe, getState, initializeTeams, updateRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, recalculateAllPortfolios, endRound } from './store/gameState'
 
 function Home() {
   const [gameState, setGameState] = React.useState(getState())
@@ -34,9 +34,12 @@ function Home() {
   }, [])
 
   function handleInvestmentChange(type, value) {
+    // Allow only digits and optional single decimal point
+    const sanitized = String(value).replace(/[^0-9.]/g, '')
+      .replace(/(\..*)\./g, '$1') // prevent multiple dots
     setInvestments(prev => ({
       ...prev,
-      [type]: value
+      [type]: sanitized
     }))
   }
 
@@ -108,7 +111,7 @@ function Home() {
                     <input 
                       className="investment-amount" 
                       placeholder="Amount" 
-                      type="number" 
+                      type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.gold}
                       onChange={e => handleInvestmentChange('gold', e.target.value)}
                     />
@@ -118,7 +121,7 @@ function Home() {
                     <input 
                       className="investment-amount" 
                       placeholder="Amount" 
-                      type="number" 
+                      type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.crypto}
                       onChange={e => handleInvestmentChange('crypto', e.target.value)}
                     />
@@ -128,7 +131,7 @@ function Home() {
                     <input 
                       className="investment-amount" 
                       placeholder="Amount" 
-                      type="number" 
+                      type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.stocks}
                       onChange={e => handleInvestmentChange('stocks', e.target.value)}
                     />
@@ -138,7 +141,7 @@ function Home() {
                     <input 
                       className="investment-amount" 
                       placeholder="Amount" 
-                      type="number" 
+                      type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.realEstate}
                       onChange={e => handleInvestmentChange('realEstate', e.target.value)}
                     />
@@ -148,7 +151,7 @@ function Home() {
                     <input 
                       className="investment-amount" 
                       placeholder="Amount" 
-                      type="number" 
+                      type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.fd}
                       onChange={e => handleInvestmentChange('fd', e.target.value)}
                     />
@@ -438,10 +441,19 @@ function AdminPanel({ onBackToLanding }) {
             <h3>Recent News</h3>
             <div className="news-list">
               {gameState.news.map(news => (
-                <div key={news.id} className="news-item">
-                  <div className="news-title">{news.title}</div>
-                  <div className="news-content">{news.content}</div>
-                  <div className="news-time">{new Date(news.timestamp).toLocaleTimeString()}</div>
+                <div key={news.id} className="news-item" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'start' }}>
+                  <div>
+                    <div className="news-title">{news.title}</div>
+                    <div className="news-content">{news.content}</div>
+                    <div className="news-time">{new Date(news.timestamp).toLocaleTimeString()}</div>
+                  </div>
+                  <button 
+                    className="admin-btn"
+                    style={{ background: '#ef4444' }}
+                    onClick={() => deleteNews(news.id)}
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
