@@ -326,6 +326,13 @@ function AdminPanel({ onBackToLanding }) {
     endRound()
   }
 
+  function formatTime(seconds) {
+    const s = Number(seconds) || 0
+    const minutes = Math.floor(s / 60)
+    const remainingSeconds = s % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
   return (
     <div className="admin-panel">
       <div className="admin-header">
