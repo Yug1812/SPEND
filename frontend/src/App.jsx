@@ -7,7 +7,7 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, recalculateAllPortfolios, endRound } from './store/gameState'
+import { subscribe, getState, initializeTeams, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound } from './store/gameState'
 
 function Home() {
   const [gameState, setGameState] = React.useState(getState())
@@ -19,6 +19,7 @@ function Home() {
     fd: ''
   })
   const [currentTeam, setCurrentTeam] = React.useState(null)
+  const [transfer, setTransfer] = React.useState({ from: 'cash', to: 'gold', amount: '' })
 
   React.useEffect(() => {
     // Get current team
@@ -65,6 +66,27 @@ function Home() {
       updateTeamPortfolio(teamId, numericInvestments)
       setInvestments({ gold: '', crypto: '', stocks: '', realEstate: '', fd: '' })
     }
+  }
+
+  function handleTransferChange(key, value) {
+    if (key === 'amount') {
+      const sanitized = String(value).replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+      setTransfer(prev => ({ ...prev, amount: sanitized }))
+      return
+    }
+    setTransfer(prev => ({ ...prev, [key]: value }))
+  }
+
+  function handleSubmitTransfer(e) {
+    e.preventDefault()
+    if (!currentTeam) return
+    if (gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0) return
+    const amount = parseFloat(transfer.amount)
+    if (!(amount > 0)) return
+    if (!transfer.from || !transfer.to || transfer.from === transfer.to) return
+    const teamId = currentTeam.id || currentTeam.name
+    transferFunds(teamId, transfer.from, transfer.to, amount)
+    setTransfer(prev => ({ ...prev, amount: '' }))
   }
 
   function formatTime(seconds) {
@@ -164,6 +186,57 @@ function Home() {
                   </div>
                 </div>
                 <button className="primary submit-btn" type="submit" disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}>Submit Investments</button>
+              </form>
+            </div>
+            <div className="investments-card" style={{ marginTop: 16 }}>
+              <h3>Transfer Funds</h3>
+              <form onSubmit={handleSubmitTransfer}>
+                <div className="investment-options">
+                  <div className="investment-item">
+                    <div className="investment-label">From</div>
+                    <select className="investment-amount"
+                      value={transfer.from}
+                      onChange={e => handleTransferChange('from', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="gold">Gold</option>
+                      <option value="crypto">Crypto</option>
+                      <option value="stocks">Stock Market</option>
+                      <option value="realEstate">Real Estate</option>
+                      <option value="fd">FD</option>
+                    </select>
+                  </div>
+                  <div className="investment-item">
+                    <div className="investment-label">To</div>
+                    <select className="investment-amount"
+                      value={transfer.to}
+                      onChange={e => handleTransferChange('to', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="gold">Gold</option>
+                      <option value="crypto">Crypto</option>
+                      <option value="stocks">Stock Market</option>
+                      <option value="realEstate">Real Estate</option>
+                      <option value="fd">FD</option>
+                    </select>
+                  </div>
+                  <div className="investment-item">
+                    <div className="investment-label">Amount</div>
+                    <input
+                      className="investment-amount"
+                      placeholder="Amount"
+                      type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$"
+                      value={transfer.amount}
+                      onChange={e => handleTransferChange('amount', e.target.value)}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                    />
+                  </div>
+                </div>
+                <button className="primary submit-btn" type="submit"
+                  disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                >Transfer</button>
               </form>
             </div>
           </div>

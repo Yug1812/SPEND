@@ -254,6 +254,49 @@ export function updateTeamPortfolio(teamId, investments) {
   updateLeaderboard()
 }
 
+export function transferFunds(teamId, fromKey, toKey, rawAmount) {
+  const source = String(fromKey)
+  const target = String(toKey)
+  const amount = Number(rawAmount)
+  if (!source || !target || source === target) return
+  if (!['cash','gold','crypto','stocks','realEstate','fd'].includes(source)) return
+  if (!['cash','gold','crypto','stocks','realEstate','fd'].includes(target)) return
+  if (!(amount > 0)) return
+
+  const teams = gameState.teams.map(team => {
+    if (team.id === teamId || team.name === teamId) {
+      const newPortfolio = { ...team.portfolio }
+      const available = Number(newPortfolio[source] || 0)
+      if (available < amount) {
+        // Not enough balance, ignore
+        return team
+      }
+      newPortfolio[source] = available - amount
+      newPortfolio[target] = Number(newPortfolio[target] || 0) + amount
+
+      // Recompute total value using current price changes
+      let totalValue = newPortfolio.cash
+      Object.keys(newPortfolio).forEach(key => {
+        if (key !== 'cash' && newPortfolio[key] > 0) {
+          const priceChange = gameState.priceChanges[key] || 0
+          const value = newPortfolio[key] * (1 + priceChange / 100)
+          totalValue += value
+        }
+      })
+
+      return {
+        ...team,
+        portfolio: newPortfolio,
+        totalValue
+      }
+    }
+    return team
+  })
+
+  setState({ teams })
+  updateLeaderboard()
+}
+
 // Recalculate all team portfolios when prices change
 export function recalculateAllPortfolios() {
   const teams = gameState.teams.map(team => {
