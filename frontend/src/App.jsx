@@ -7,7 +7,7 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound } from './store/gameState'
+import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound } from './store/gameState'
 import axios from 'axios'
 
 function Home() {
@@ -32,7 +32,13 @@ function Home() {
       setGameState(newState)
     })
     
-    return unsubscribe
+    // Start polling for team updates
+    startPollingTeams()
+    
+    return () => {
+      unsubscribe()
+      stopPollingTeams()
+    }
   }, [])
 
   function handleInvestmentChange(type, value) {
@@ -64,7 +70,9 @@ function Home() {
     if (totalInvested > 0) {
       try {
         const teamId = currentTeam.id || currentTeam._id || currentTeam.name
-        await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams/${teamId}/invest`, { investments: numericInvestments })
+        const response = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams/${teamId}/invest`, { investments: numericInvestments })
+        // Update local store with returned team data
+        updateTeamInStore(response.data)
         setInvestments({ gold: '', crypto: '', stocks: '', realEstate: '', fd: '' })
       } catch (err) {
         console.error('Invest failed', err)
@@ -90,7 +98,11 @@ function Home() {
     if (!transfer.from || !transfer.to || transfer.from === transfer.to) return
     const teamId = currentTeam.id || currentTeam._id || currentTeam.name
     axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams/${teamId}/transfer`, { from: transfer.from, to: transfer.to, amount })
-      .then(() => setTransfer(prev => ({ ...prev, amount: '' })))
+      .then(response => {
+        // Update local store with returned team data
+        updateTeamInStore(response.data)
+        setTransfer(prev => ({ ...prev, amount: '' }))
+      })
       .catch(err => console.error('Transfer failed', err))
   }
 
@@ -820,7 +832,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = React.useState(false)
   const [adminLoggedIn, setAdminLoggedIn] = React.useState(false)
   
-  // Initialize teams from localStorage
+  // Initialize teams from backend
   React.useEffect(() => {
     initializeTeams()
   }, [])

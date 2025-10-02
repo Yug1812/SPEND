@@ -340,12 +340,59 @@ function updateLeaderboard() {
   setState({ leaderboard })
 }
 
-// Initialize with existing teams from localStorage
-export function initializeTeams() {
-  const existingTeams = JSON.parse(localStorage.getItem('spend.teams') || '[]')
-  existingTeams.forEach(team => {
-    if (!gameState.teams.find(t => t.name === team.name)) {
-      addTeam(team)
+// Fetch teams from backend and sync to local store
+export async function initializeTeams() {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams`)
+    if (response.ok) {
+      const teams = await response.json()
+      setState({ teams: teams || [] })
+      updateLeaderboard()
     }
-  })
+  } catch (err) {
+    console.warn('Failed to fetch teams from backend:', err)
+    // Fallback to localStorage
+    const existingTeams = JSON.parse(localStorage.getItem('spend.teams') || '[]')
+    existingTeams.forEach(team => {
+      if (!gameState.teams.find(t => t.name === team.name)) {
+        addTeam(team)
+      }
+    })
+  }
+}
+
+// Poll for team updates every 5 seconds
+let pollInterval = null
+export function startPollingTeams() {
+  if (pollInterval) return
+  pollInterval = setInterval(async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams`)
+      if (response.ok) {
+        const teams = await response.json()
+        setState({ teams: teams || [] })
+        updateLeaderboard()
+      }
+    } catch (err) {
+      console.warn('Polling failed:', err)
+    }
+  }, 5000)
+}
+
+export function stopPollingTeams() {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
+}
+
+// Update a specific team in the store (after invest/transfer)
+export function updateTeamInStore(updatedTeam) {
+  const teams = gameState.teams.map(team => 
+    (team._id === updatedTeam._id || team.id === updatedTeam._id || team.name === updatedTeam.name) 
+      ? updatedTeam 
+      : team
+  )
+  setState({ teams })
+  updateLeaderboard()
 }
