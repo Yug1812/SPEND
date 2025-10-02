@@ -3,6 +3,7 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
+const connectDB = require('./config/database');
 
 // Import routes
 const teamRoutes = require('./routes/teams');
@@ -17,6 +18,9 @@ const io = socketIo(server, {
     methods: ["GET", "POST"]
   }
 });
+
+// Connect to MongoDB
+connectDB();
 
 // Middleware
 app.use(cors());

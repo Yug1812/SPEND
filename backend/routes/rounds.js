@@ -1,54 +1,37 @@
 const express = require('express');
 const router = express.Router();
-const { updateTeamPortfolio } = require('./teams');
-
-// In-memory storage for rounds
-let rounds = [];
-let currentRound = null;
+const Round = require('../models/Round');
 
 // Get current round
-router.get('/current', (req, res) => {
+router.get('/current', async (req, res) => {
   try {
-    if (!currentRound) {
-      return res.status(404).json({ message: 'No active round found' });
-    }
-    res.json(currentRound);
+    const current = await Round.findOne({ status: 'active' }).lean();
+    if (!current) return res.status(404).json({ message: 'No active round found' });
+    res.json(current);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
 // Start a new round
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    // End current round if any
-    if (currentRound) {
-      currentRound.status = 'completed';
-      currentRound.endTime = Date.now();
-      rounds = rounds.map(r => r.roundNumber === currentRound.roundNumber ? currentRound : r);
-    }
+    // End any currently active round
+    await Round.updateMany({ status: 'active' }, { $set: { status: 'completed', endTime: new Date() } });
 
-    // Create new round
-    const roundNumber = rounds.length > 0 ? Math.max(...rounds.map(r => r.roundNumber)) + 1 : 1;
-    
-    const newRound = {
+    const latest = await Round.findOne().sort({ roundNumber: -1 }).lean();
+    const roundNumber = latest ? latest.roundNumber + 1 : 1;
+    const duration = Number(req.body.duration) || 300;
+
+    const newRound = await Round.create({
       roundNumber,
       status: 'active',
-      startTime: Date.now(),
-      duration: 300, // 5 minutes in seconds
-      priceChanges: {
-        gold: 0,
-        crypto: 0,
-        stocks: 0,
-        realEstate: 0,
-        fd: 0
-      },
+      startTime: new Date(),
+      duration,
+      priceChanges: { gold: 0, crypto: 0, stocks: 0, realEstate: 0, fd: 0 },
       news: []
-    };
+    });
 
-    currentRound = newRound;
-    rounds.push(newRound);
-    
     res.status(201).json(newRound);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -56,52 +39,32 @@ router.post('/', (req, res) => {
 });
 
 // End current round
-router.post('/end', (req, res) => {
+router.post('/end', async (req, res) => {
   try {
-    if (!currentRound || currentRound.status !== 'active') {
-      return res.status(404).json({ message: 'No active round to end' });
+    const current = await Round.findOne({ status: 'active' });
+    if (!current) return res.status(404).json({ message: 'No active round to end' });
+    if (req.body.priceChanges) {
+      current.priceChanges = { ...current.priceChanges.toObject?.() || current.priceChanges, ...req.body.priceChanges };
     }
-
-    // Update round status
-    currentRound.status = 'completed';
-    currentRound.endTime = Date.now();
-    currentRound.priceChanges = req.body.priceChanges || currentRound.priceChanges;
-
-    // Update all teams' portfolios with the price changes
-    // This would be implemented based on your teams data structure
-    // teams.forEach(team => updateTeamPortfolio(team.id, currentRound.priceChanges));
-
-    // Update rounds array
-    rounds = rounds.map(r => r.roundNumber === currentRound.roundNumber ? currentRound : r);
-    
-    res.json(currentRound);
+    current.status = 'completed';
+    current.endTime = new Date();
+    await current.save();
+    res.json(current);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
 // Add news to current round
-router.post('/news', (req, res) => {
+router.post('/news', async (req, res) => {
   try {
-    if (!currentRound) {
-      return res.status(400).json({ message: 'No active round' });
-    }
-
-    const newsItem = {
-      id: Date.now().toString(),
-      title: req.body.title,
-      content: req.body.content,
-      timestamp: new Date()
-    };
-
-    currentRound.news.push(newsItem);
-    
-    // Emit news event to all connected clients
+    const current = await Round.findOne({ status: 'active' });
+    if (!current) return res.status(400).json({ message: 'No active round' });
+    const newsItem = { title: req.body.title, content: req.body.content, publishedAt: new Date() };
+    current.news.push(newsItem);
+    await current.save();
     const io = req.app.get('io');
-    if (io) {
-      io.emit('news', newsItem);
-    }
-
+    if (io) io.emit('news', { ...newsItem, roundNumber: current.roundNumber });
     res.status(201).json(newsItem);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -109,32 +72,23 @@ router.post('/news', (req, res) => {
 });
 
 // Update prices for current round
-router.post('/prices', (req, res) => {
+router.post('/prices', async (req, res) => {
   try {
-    if (!currentRound) {
-      return res.status(400).json({ message: 'No active round' });
-    }
-
-    currentRound.priceChanges = {
-      ...currentRound.priceChanges,
-      ...req.body.priceChanges
-    };
-
-    // Emit price update to all connected clients
+    const current = await Round.findOne({ status: 'active' });
+    if (!current) return res.status(400).json({ message: 'No active round' });
+    current.priceChanges = { ...current.priceChanges.toObject?.() || current.priceChanges, ...req.body.priceChanges };
+    await current.save();
     const io = req.app.get('io');
-    if (io) {
-      io.emit('prices', currentRound.priceChanges);
-    }
-
-    res.json(currentRound.priceChanges);
+    if (io) io.emit('prices', current.priceChanges);
+    res.json(current.priceChanges);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 });
 
 // Helper function to get current round data
-function getCurrentRound() {
-  return currentRound;
+async function getCurrentRound() {
+  return await Round.findOne({ status: 'active' }).lean();
 }
 
 module.exports = router;

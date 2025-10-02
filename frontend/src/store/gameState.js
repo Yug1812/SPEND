@@ -154,8 +154,15 @@ export function deleteNews(newsId) {
 }
 
 export function updatePrices(priceData) {
+  const normalized = {
+    gold: Number(priceData.gold) || 0,
+    crypto: Number(priceData.crypto) || 0,
+    stocks: Number(priceData.stocks) || 0,
+    realEstate: Number(priceData.realEstate) || 0,
+    fd: Number(priceData.fd) || 0
+  }
   setState({
-    priceChanges: { ...priceData }
+    priceChanges: normalized
   })
   // Recalculate all portfolios when prices change
   setTimeout(() => {

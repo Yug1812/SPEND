@@ -8,6 +8,7 @@ import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
 import { subscribe, getState, initializeTeams, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound } from './store/gameState'
+import axios from 'axios'
 
 function Home() {
   const [gameState, setGameState] = React.useState(getState())
@@ -44,7 +45,7 @@ function Home() {
     }))
   }
 
-  function handleSubmitInvestments(e) {
+  async function handleSubmitInvestments(e) {
     e.preventDefault()
     if (!currentTeam) return
     if (gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0) return
@@ -61,10 +62,13 @@ function Home() {
     })
     
     if (totalInvested > 0) {
-      // Update team portfolio in game state
-      const teamId = currentTeam.id || currentTeam.name
-      updateTeamPortfolio(teamId, numericInvestments)
-      setInvestments({ gold: '', crypto: '', stocks: '', realEstate: '', fd: '' })
+      try {
+        const teamId = currentTeam.id || currentTeam._id || currentTeam.name
+        await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams/${teamId}/invest`, { investments: numericInvestments })
+        setInvestments({ gold: '', crypto: '', stocks: '', realEstate: '', fd: '' })
+      } catch (err) {
+        console.error('Invest failed', err)
+      }
     }
   }
 
@@ -84,9 +88,10 @@ function Home() {
     const amount = parseFloat(transfer.amount)
     if (!(amount > 0)) return
     if (!transfer.from || !transfer.to || transfer.from === transfer.to) return
-    const teamId = currentTeam.id || currentTeam.name
-    transferFunds(teamId, transfer.from, transfer.to, amount)
-    setTransfer(prev => ({ ...prev, amount: '' }))
+    const teamId = currentTeam.id || currentTeam._id || currentTeam.name
+    axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams/${teamId}/transfer`, { from: transfer.from, to: transfer.to, amount })
+      .then(() => setTransfer(prev => ({ ...prev, amount: '' })))
+      .catch(err => console.error('Transfer failed', err))
   }
 
   function formatTime(seconds) {
@@ -366,11 +371,17 @@ function AdminPanel({ onBackToLanding }) {
         duration: newState.roundDuration,
         status: newState.roundStatus
       })
-      setPriceData(newState.priceChanges)
     })
     
     return unsubscribe
   }, [])
+
+  React.useEffect(() => {
+    if (activeTab === 'prices') {
+      const current = getState()
+      setPriceData(current.priceChanges)
+    }
+  }, [activeTab])
 
   function handleRoundSubmit(e) {
     e.preventDefault()
@@ -565,10 +576,11 @@ function AdminPanel({ onBackToLanding }) {
               <div className="admin-form-group">
                 <label className="admin-form-label">Gold (%)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   step="0.1"
                   value={priceData.gold}
-                  onChange={e => setPriceData({ ...priceData, gold: e.target.value })}
+                  onChange={e => setPriceData({ ...priceData, gold: e.target.value.replace(/[^0-9.-]/g, '').replace(/(.*)-/,'-$1') })}
                   className="admin-form-input"
                   placeholder="0.0"
                 />
@@ -576,10 +588,11 @@ function AdminPanel({ onBackToLanding }) {
               <div className="admin-form-group">
                 <label className="admin-form-label">Crypto (%)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   step="0.1"
                   value={priceData.crypto}
-                  onChange={e => setPriceData({ ...priceData, crypto: e.target.value })}
+                  onChange={e => setPriceData({ ...priceData, crypto: e.target.value.replace(/[^0-9.-]/g, '').replace(/(.*)-/,'-$1') })}
                   className="admin-form-input"
                   placeholder="0.0"
                 />
@@ -587,10 +600,11 @@ function AdminPanel({ onBackToLanding }) {
               <div className="admin-form-group">
                 <label className="admin-form-label">Stocks (%)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   step="0.1"
                   value={priceData.stocks}
-                  onChange={e => setPriceData({ ...priceData, stocks: e.target.value })}
+                  onChange={e => setPriceData({ ...priceData, stocks: e.target.value.replace(/[^0-9.-]/g, '').replace(/(.*)-/,'-$1') })}
                   className="admin-form-input"
                   placeholder="0.0"
                 />
@@ -598,10 +612,11 @@ function AdminPanel({ onBackToLanding }) {
               <div className="admin-form-group">
                 <label className="admin-form-label">Real Estate (%)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   step="0.1"
                   value={priceData.realEstate}
-                  onChange={e => setPriceData({ ...priceData, realEstate: e.target.value })}
+                  onChange={e => setPriceData({ ...priceData, realEstate: e.target.value.replace(/[^0-9.-]/g, '').replace(/(.*)-/,'-$1') })}
                   className="admin-form-input"
                   placeholder="0.0"
                 />
@@ -609,10 +624,11 @@ function AdminPanel({ onBackToLanding }) {
               <div className="admin-form-group">
                 <label className="admin-form-label">FD (%)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   step="0.1"
                   value={priceData.fd}
-                  onChange={e => setPriceData({ ...priceData, fd: e.target.value })}
+                  onChange={e => setPriceData({ ...priceData, fd: e.target.value.replace(/[^0-9.-]/g, '').replace(/(.*)-/,'-$1') })}
                   className="admin-form-input"
                   placeholder="0.0"
                 />

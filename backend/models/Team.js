@@ -7,6 +7,10 @@ const teamSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  passwordHash: {
+    type: String,
+    required: false
+  },
   members: [{
     type: String,
     trim: true
