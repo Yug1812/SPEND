@@ -4,20 +4,15 @@ import { useNavigate } from 'react-router-dom'
 export default function LoginPage({ onBackToLanding, onShowRegister }) {
   const navigate = useNavigate()
   const [teamName, setTeamName] = React.useState('')
-  const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState('')
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
     
     const trimmedTeam = teamName.trim()
     if (!trimmedTeam) {
       setError('Team name is required')
-      return
-    }
-    if (!password) {
-      setError('Password is required')
       return
     }
 
@@ -30,31 +25,10 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
       return
     }
 
-    // Verify password
-    try {
-      const enteredHash = await hashPassword(password)
-      if (!team.passwordHash || team.passwordHash !== enteredHash) {
-        setError('Invalid password')
-        return
-      }
-    } catch (err) {
-      setError('Unable to verify password. Please try again.')
-      return
-    }
-
     // Set current team and redirect
     localStorage.setItem('spend.team', JSON.stringify(team))
     window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(team) }))
     navigate('/')
-  }
-
-  async function hashPassword(password) {
-    const enc = new TextEncoder()
-    const data = enc.encode(password)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-    return hashHex
   }
 
   return (
@@ -84,17 +58,6 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
             placeholder="Enter your team name"
             value={teamName}
             onChange={e => setTeamName(e.target.value)}
-            className="field"
-          />
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Password</span>
-          <input
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
             className="field"
           />
         </label>
