@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Round = require('../models/Round');
+const Team = require('../models/Team');
 
 // Get current round
 router.get('/current', async (req, res) => {
@@ -49,7 +50,31 @@ router.post('/end', async (req, res) => {
     current.status = 'completed';
     current.endTime = new Date();
     await current.save();
-    res.json(current);
+
+    // Apply price changes to all teams' total values (do not mutate quantities)
+    const priceChanges = current.priceChanges || {};
+    const teams = await Team.find();
+    await Promise.all(teams.map(async (team) => {
+      const portfolio = team.portfolio || {};
+      let totalValue = Number(portfolio.cash || 0);
+      Object.keys(portfolio).forEach((asset) => {
+        if (asset !== 'cash' && Number(portfolio[asset]) > 0) {
+          const change = Number(priceChanges[asset] || 0);
+          totalValue += Number(portfolio[asset]) * (1 + change / 100);
+        }
+      });
+      team.totalValue = totalValue;
+      await team.save();
+    }));
+
+    // Emit leaderboard update
+    const leaderboard = (await Team.find({}, '-passwordHash -__v').lean())
+      .sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0))
+      .map((t, idx) => ({ rank: idx + 1, teamName: t.name, portfolioValue: t.totalValue || 0 }));
+    const io = req.app.get('io');
+    if (io) io.emit('leaderboard:update', leaderboard);
+
+    res.json({ round: current, leaderboard });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -2,20 +2,21 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import './register.css'
 import { addTeam } from '../store/gameState'
+import axios from 'axios'
 
 export default function RegisterPage({ onBackToLogin }) {
   const navigate = useNavigate()
   const [teamName, setTeamName] = React.useState('')
   const [members, setMembers] = React.useState(['', '', '', '', ''])
   const [error, setError] = React.useState('')
-
   function updateMember(index, value) {
     const next = members.slice()
     next[index] = value
     setMembers(next)
   }
-
-  function handleSubmit(e) {
+  const [password, setPassword] = React.useState('')
+  const [confirmPassword, setConfirmPassword] = React.useState('')
+  async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     const trimmedTeam = teamName.trim()
@@ -28,27 +29,36 @@ export default function RegisterPage({ onBackToLogin }) {
       setError('Add at least one member')
       return
     }
-
-    // Check if team already exists
-    const existingTeams = JSON.parse(localStorage.getItem('spend.teams') || '[]')
-    if (existingTeams.some(t => t.name.toLowerCase() === trimmedTeam.toLowerCase())) {
-      setError('Team name already exists. Please choose a different name.')
+    if (!password) {
+      setError('Password is required')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
       return
     }
 
-    const team = { name: trimmedTeam, members: trimmedMembers }
-    
-    // Save to teams list and set as current team
-    const updatedTeams = [...existingTeams, team]
-    localStorage.setItem('spend.teams', JSON.stringify(updatedTeams))
-    localStorage.setItem('spend.team', JSON.stringify(team))
-    
-    // Add team to game state
-    addTeam(team)
-    
-    // Trigger storage event to update the app
-    window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(team) }))
-    navigate('/')
+    try {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+      const { data } = await axios.post(`${base}/api/teams/register`, {
+        name: trimmedTeam,
+        members: trimmedMembers,
+        password
+      })
+
+      // Save current team locally and update store
+      localStorage.setItem('spend.team', JSON.stringify(data))
+      addTeam(data)
+      window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(data) }))
+      navigate('/')
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Registration failed'
+      setError(msg)
+    }
   }
 
   function clearTeam() {
@@ -91,6 +101,28 @@ export default function RegisterPage({ onBackToLogin }) {
                 />
               ))}
             </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="form-input"
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Confirm Password</label>
+            <input
+              type="password"
+              placeholder="Re-enter password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              className="form-input"
+            />
           </div>
 
           {error ? (

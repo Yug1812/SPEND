@@ -7,7 +7,8 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound } from './store/gameState'
+import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound, setPriceChanges, setLeaderboard, pushNewsFromServer, applyRoundFromServer } from './store/gameState'
+import { setupRealtime } from './socket'
 import axios from 'axios'
 
 function Home() {
@@ -829,6 +830,16 @@ export default function App() {
   const team = useTeam()
   const [showRegister, setShowRegister] = React.useState(false)
   const [showLogin, setShowLogin] = React.useState(false)
+
+  React.useEffect(() => {
+    // initialize real-time updates once
+    setupRealtime({
+      onPrices: (prices) => setPriceChanges(prices),
+      onNews: (news) => pushNewsFromServer(news),
+      onLeaderboard: (lb) => setLeaderboard(lb),
+      onRound: (round) => applyRoundFromServer(round)
+    })
+  }, [])
   const [showAdmin, setShowAdmin] = React.useState(false)
   const [adminLoggedIn, setAdminLoggedIn] = React.useState(false)
   

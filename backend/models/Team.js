@@ -9,7 +9,7 @@ const teamSchema = new mongoose.Schema({
   },
   passwordHash: {
     type: String,
-    required: false
+    required: true
   },
   members: [{
     type: String,

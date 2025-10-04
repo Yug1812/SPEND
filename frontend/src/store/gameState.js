@@ -1,43 +1,38 @@
-// Global game state store (defaults)
-let gameState = {
+// Global game state store
+const DEFAULT_STATE = {
   currentRound: 1,
   roundDuration: 6,
   roundStatus: 'active',
   timeRemaining: 360, // seconds
-  roundEndAt: null, // timestamp in ms when the round ends
   news: [
     { id: 1, title: "Market rallies on tech earnings", content: "Technology stocks show strong performance", timestamp: Date.now() - 120000 },
     { id: 2, title: "Bond yields drop amid rate cut hopes", content: "Federal Reserve signals potential rate cuts", timestamp: Date.now() - 300000 }
   ],
-  priceChanges: {
-    gold: 0,
-    crypto: 0,
-    stocks: 0,
-    realEstate: 0,
-    fd: 0
-  },
+  priceChanges: { gold: 0, crypto: 0, stocks: 0, realEstate: 0, fd: 0 },
   teams: [],
   leaderboard: [],
   roundHistory: [] // Store portfolio values after each round
 }
 
-// Load persisted state from localStorage (if available)
-try {
-  const persisted = JSON.parse(localStorage.getItem('spend.gameState') || 'null')
-  if (persisted && typeof persisted === 'object') {
-    // Merge persisted with defaults to ensure all keys exist
-    gameState = {
-      ...gameState,
-      ...persisted,
-      // Defensive: ensure shapes
-      priceChanges: { ...gameState.priceChanges, ...(persisted.priceChanges || {}) },
-      news: Array.isArray(persisted.news) ? persisted.news : gameState.news,
-      teams: Array.isArray(persisted.teams) ? persisted.teams : gameState.teams,
-      leaderboard: Array.isArray(persisted.leaderboard) ? persisted.leaderboard : gameState.leaderboard,
-      roundHistory: Array.isArray(persisted.roundHistory) ? persisted.roundHistory : gameState.roundHistory
-    }
+function safeParse(json, fallback) {
+  try { return json ? JSON.parse(json) : fallback } catch { return fallback }
+}
+
+// Load saved state from localStorage if present
+let gameState = (() => {
+  const saved = safeParse(localStorage.getItem('spend.state'), null)
+  if (!saved) return { ...DEFAULT_STATE }
+  return {
+    ...DEFAULT_STATE,
+    ...saved,
+    priceChanges: { ...DEFAULT_STATE.priceChanges, ...(saved.priceChanges || {}) },
+    teams: Array.isArray(saved.teams) ? saved.teams : [],
+    leaderboard: Array.isArray(saved.leaderboard) ? saved.leaderboard : [],
+    roundHistory: Array.isArray(saved.roundHistory) ? saved.roundHistory : []
   }
-} catch {}
+})()
+
+let roundTimerId = null
 
 // Listeners for state changes
 let listeners = []
@@ -50,21 +45,17 @@ export function subscribe(listener) {
   }
 }
 
-// Get current state
+// Get current state (immutable copy)
 export function getState() {
   return { ...gameState }
 }
 
-// Update state and notify listeners
+// Update state and notify listeners; persist to localStorage
 function setState(newState) {
   gameState = { ...gameState, ...newState }
-  // Persist state so it survives refresh
-  try { localStorage.setItem('spend.gameState', JSON.stringify(gameState)) } catch {}
+  try { localStorage.setItem('spend.state', JSON.stringify(gameState)) } catch {}
   listeners.forEach(listener => listener(gameState))
 }
-
-// Internal: interval for ticking the timer
-let roundTimerId = null
 
 function clearRoundTimer() {
   if (roundTimerId) {
@@ -168,6 +159,18 @@ export function updatePrices(priceData) {
   setTimeout(() => {
     recalculateAllPortfolios()
   }, 100)
+}
+
+// Directly set price changes from server (no admin form side-effects)
+export function setPriceChanges(prices) {
+  const normalized = {
+    gold: Number(prices?.gold) || 0,
+    crypto: Number(prices?.crypto) || 0,
+    stocks: Number(prices?.stocks) || 0,
+    realEstate: Number(prices?.realEstate) || 0,
+    fd: Number(prices?.fd) || 0
+  }
+  setState({ priceChanges: normalized })
 }
 
 // End current round and apply price changes
@@ -308,7 +311,6 @@ export function transferFunds(teamId, fromKey, toKey, rawAmount) {
 export function recalculateAllPortfolios() {
   const teams = gameState.teams.map(team => {
     let totalValue = team.portfolio.cash
-    
     Object.keys(team.portfolio).forEach(key => {
       if (key !== 'cash' && team.portfolio[key] > 0) {
         const priceChange = gameState.priceChanges[key] || 0
@@ -316,28 +318,41 @@ export function recalculateAllPortfolios() {
         totalValue += value
       }
     })
-    
-    return {
-      ...team,
-      totalValue
-    }
+    return { ...team, totalValue }
   })
-  
   setState({ teams })
   updateLeaderboard()
 }
 
-function updateLeaderboard() {
-  const leaderboard = gameState.teams
-    .sort((a, b) => b.totalValue - a.totalValue)
-    .map((team, index) => ({
-      rank: index + 1,
-      teamName: team.name,
-      portfolioValue: team.totalValue,
-      change: team.totalValue - 500000 // Change from initial value
-    }))
-  
-  setState({ leaderboard })
+// Apply round summary from server
+export function applyRoundFromServer(round) {
+  if (!round) return
+  setState({
+    currentRound: Number(round.roundNumber) || gameState.currentRound,
+    roundStatus: String(round.status || '').toLowerCase() || gameState.roundStatus
+  })
+}
+
+// Replace leaderboard from server
+export function setLeaderboard(lb) {
+  const mapped = Array.isArray(lb) ? lb.map(item => ({
+    rank: Number(item.rank) || 0,
+    teamName: String(item.teamName || ''),
+    portfolioValue: Number(item.portfolioValue) || 0,
+    change: (Number(item.portfolioValue) || 0) - 500000
+  })) : []
+  setState({ leaderboard: mapped })
+}
+
+// Push incoming news from server to the top
+export function pushNewsFromServer(news) {
+  const newNews = {
+    id: Date.now(),
+    title: String(news?.title || 'Update'),
+    content: String(news?.content || ''),
+    timestamp: Date.now()
+  }
+  setState({ news: [newNews, ...gameState.news] })
 }
 
 // Fetch teams from backend and sync to local store

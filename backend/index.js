@@ -2,8 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
+const mongoose = require('mongoose');
 require('dotenv').config();
-const connectDB = require('./config/database');
 
 // Import routes
 const teamRoutes = require('./routes/teams');
@@ -19,8 +19,7 @@ const io = socketIo(server, {
   }
 });
 
-// Connect to MongoDB
-connectDB();
+// MongoDB connection is initialized in start()
 
 // Middleware
 app.use(cors());
@@ -78,24 +77,38 @@ app.use((err, req, res, next) => {
 
 // Start the server
 const port = process.env.PORT || 4000;
-server.listen(port, () => {
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
-  
-  // Log available routes
-  console.log('Available routes:');
-  console.log(`- GET  /api/health`);
-  console.log(`- GET  /api/teams`);
-  console.log(`- POST /api/teams`);
-  console.log(`- GET  /api/teams/:id`);
-  console.log(`- GET  /api/rounds/current`);
-  console.log(`- POST /api/rounds`);
-  console.log(`- POST /api/rounds/end`);
-  console.log(`- POST /api/rounds/news`);
-  console.log(`- POST /api/rounds/prices`);
-  console.log(`- POST /api/admin/login`);
-  console.log(`- GET  /api/admin/dashboard`);
-  console.log(`- POST /api/admin/reset`);
-});
+async function start() {
+  try {
+    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/spend'
+    await mongoose.connect(mongoUri, { dbName: process.env.MONGO_DB || 'spend' })
+    console.log('MongoDB connected')
+
+    server.listen(port, () => {
+      console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
+      
+      // Log available routes
+      console.log('Available routes:');
+      console.log(`- GET  /api/health`);
+      console.log(`- GET  /api/teams`);
+      console.log(`- POST /api/teams/register`);
+      console.log(`- POST /api/teams/login`);
+      console.log(`- GET  /api/teams/:id`);
+      console.log(`- GET  /api/rounds/current`);
+      console.log(`- POST /api/rounds`);
+      console.log(`- POST /api/rounds/end`);
+      console.log(`- POST /api/rounds/news`);
+      console.log(`- POST /api/rounds/prices`);
+      console.log(`- POST /api/admin/login`);
+      console.log(`- GET  /api/admin/dashboard`);
+      console.log(`- POST /api/admin/reset`);
+    });
+  } catch (err) {
+    console.error('Failed to start server:', err)
+    process.exit(1)
+  }
+}
+
+start()
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

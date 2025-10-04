@@ -1,12 +1,14 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 
 export default function LoginPage({ onBackToLanding, onShowRegister }) {
   const navigate = useNavigate()
   const [teamName, setTeamName] = React.useState('')
+  const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState('')
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     
@@ -15,20 +17,22 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
       setError('Team name is required')
       return
     }
-
-    // Check if team exists in localStorage
-    const existingTeams = JSON.parse(localStorage.getItem('spend.teams') || '[]')
-    const team = existingTeams.find(t => t.name.toLowerCase() === trimmedTeam.toLowerCase())
-    
-    if (!team) {
-      setError('Team not found. Please register first.')
+    if (!password) {
+      setError('Password is required')
       return
     }
 
-    // Set current team and redirect
-    localStorage.setItem('spend.team', JSON.stringify(team))
-    window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(team) }))
-    navigate('/')
+    try {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+      const { data } = await axios.post(`${base}/api/teams/login`, { name: trimmedTeam, password })
+      // Set current team and redirect
+      localStorage.setItem('spend.team', JSON.stringify(data))
+      window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(data) }))
+      navigate('/')
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Login failed'
+      setError(msg)
+    }
   }
 
   return (
@@ -58,6 +62,17 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
             placeholder="Enter your team name"
             value={teamName}
             onChange={e => setTeamName(e.target.value)}
+            className="field"
+          />
+        </label>
+
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Password</span>
+          <input
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
             className="field"
           />
         </label>
