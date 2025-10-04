@@ -29,6 +29,7 @@ app.use(express.json());
 app.set('io', io);
 
 // Routes
+app.get("/",(req,res) => {res.status(200).json({success:true,msg:"OK"})});
 app.use('/api/teams', teamRoutes);
 app.use('/api/rounds', roundRoutes);
 app.use('/api/admin', adminRoutes);
