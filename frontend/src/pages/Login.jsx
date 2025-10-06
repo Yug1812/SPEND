@@ -7,31 +7,50 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
   const [teamName, setTeamName] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setLoading(true)
     
     const trimmedTeam = teamName.trim()
     if (!trimmedTeam) {
       setError('Team name is required')
+      setLoading(false)
       return
     }
     if (!password) {
       setError('Password is required')
+      setLoading(false)
       return
     }
 
     try {
       const base = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-      const { data } = await axios.post(`${base}/api/teams/login`, { name: trimmedTeam, password })
+      // Log the data being sent for debugging
+      const requestData = { name: trimmedTeam, password }
+      console.log('Sending login data:', requestData)
+      
+      const { data } = await axios.post(`${base}/api/teams/login`, requestData)
       // Set current team and redirect
       localStorage.setItem('spend.team', JSON.stringify(data))
       window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(data) }))
       navigate('/')
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Login failed'
+      console.error('Login error:', err)
+      // More detailed error handling
+      let msg = 'Login failed'
+      if (err?.response?.status === 400) {
+        msg = err.response.data.message || 'Invalid credentials'
+      } else if (err?.response?.status === 500) {
+        msg = 'Server error. Please try again.'
+      } else if (err?.message) {
+        msg = err.message
+      }
       setError(msg)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -63,6 +82,7 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
             value={teamName}
             onChange={e => setTeamName(e.target.value)}
             className="field"
+            required
           />
         </label>
 
@@ -74,6 +94,7 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
             value={password}
             onChange={e => setPassword(e.target.value)}
             className="field"
+            required
           />
         </label>
 
@@ -82,7 +103,9 @@ export default function LoginPage({ onBackToLanding, onShowRegister }) {
         ) : null}
 
         <div>
-          <button className="primary" type="submit">Login</button>
+          <button className="primary" type="submit" disabled={loading}>
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
         </div>
       </form>
     </div>

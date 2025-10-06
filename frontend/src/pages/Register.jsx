@@ -9,46 +9,58 @@ export default function RegisterPage({ onBackToLogin }) {
   const [teamName, setTeamName] = React.useState('')
   const [members, setMembers] = React.useState(['', '', '', '', ''])
   const [error, setError] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
+  
   function updateMember(index, value) {
     const next = members.slice()
     next[index] = value
     setMembers(next)
   }
+  
   const [password, setPassword] = React.useState('')
   const [confirmPassword, setConfirmPassword] = React.useState('')
+  
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setLoading(true)
+    
     const trimmedTeam = teamName.trim()
+    // Filter out empty members but allow registration with no members
     const trimmedMembers = members.map(m => m.trim()).filter(Boolean)
+    
     if (!trimmedTeam) {
       setError('Team name is required')
-      return
-    }
-    if (trimmedMembers.length === 0) {
-      setError('Add at least one member')
+      setLoading(false)
       return
     }
     if (!password) {
       setError('Password is required')
+      setLoading(false)
       return
     }
     if (password.length < 6) {
       setError('Password must be at least 6 characters')
+      setLoading(false)
       return
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match')
+      setLoading(false)
       return
     }
 
     try {
       const base = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-      const { data } = await axios.post(`${base}/api/teams/register`, {
+      // Log the data being sent for debugging
+      const requestData = {
         name: trimmedTeam,
         members: trimmedMembers,
         password
-      })
+      }
+      console.log('Sending registration data:', requestData)
+      
+      const { data } = await axios.post(`${base}/api/teams/register`, requestData)
 
       // Save current team locally and update store
       localStorage.setItem('spend.team', JSON.stringify(data))
@@ -56,8 +68,19 @@ export default function RegisterPage({ onBackToLogin }) {
       window.dispatchEvent(new StorageEvent('storage', { key: 'spend.team', newValue: JSON.stringify(data) }))
       navigate('/')
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Registration failed'
+      console.error('Registration error:', err)
+      // More detailed error handling
+      let msg = 'Registration failed'
+      if (err?.response?.status === 400) {
+        msg = err.response.data.message || 'Invalid data provided'
+      } else if (err?.response?.status === 500) {
+        msg = 'Server error. Please try again.'
+      } else if (err?.message) {
+        msg = err.message
+      }
       setError(msg)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -85,6 +108,7 @@ export default function RegisterPage({ onBackToLogin }) {
               value={teamName}
               onChange={e => setTeamName(e.target.value)}
               className="form-input"
+              required
             />
           </div>
 
@@ -111,6 +135,7 @@ export default function RegisterPage({ onBackToLogin }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="form-input"
+              required
             />
           </div>
 
@@ -122,6 +147,7 @@ export default function RegisterPage({ onBackToLogin }) {
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               className="form-input"
+              required
             />
           </div>
 
@@ -130,12 +156,12 @@ export default function RegisterPage({ onBackToLogin }) {
           ) : null}
 
           <div className="submit-section">
-            <button className="btn-submit" type="submit">Register team</button>
+            <button className="btn-submit" type="submit" disabled={loading}>
+              {loading ? 'Registering...' : 'Register team'}
+            </button>
           </div>
         </form>
       </div>
     </div>
   )
 }
-
-

@@ -21,7 +21,17 @@ const teamSchema = new mongoose.Schema({
     stocks: { type: Number, default: 0 },
     realEstate: { type: Number, default: 0 },
     fd: { type: Number, default: 0 },
-    cash: { type: Number, default: 500000 }
+    cash: { type: Number, default: 500000 },
+    // Auction items will be stored as an array of objects
+    auctionItems: { 
+      type: [{
+        id: String,
+        name: String,
+        price: Number,
+        image: String
+      }], 
+      default: [] 
+    }
   },
   totalValue: { type: Number, default: 500000 },
   investments: [{

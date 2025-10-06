@@ -44,26 +44,35 @@ router.post('/end', async (req, res) => {
   try {
     const current = await Round.findOne({ status: 'active' });
     if (!current) return res.status(404).json({ message: 'No active round to end' });
-    if (req.body.priceChanges) {
-      current.priceChanges = { ...current.priceChanges.toObject?.() || current.priceChanges, ...req.body.priceChanges };
-    }
-    current.status = 'completed';
+    
+    // Use price changes from the round object, not from request body
+    // This way, price changes set by admin are automatically applied
+    const priceChanges = current.priceChanges || {};
+    console.log('Ending round with price changes:', priceChanges);
+    
+    current.status = 'ended';
     current.endTime = new Date();
+    // Reset price changes to zero for the next round
+    current.priceChanges = { gold: 0, crypto: 0, stocks: 0, realEstate: 0, fd: 0 };
     await current.save();
 
     // Apply price changes to all teams' total values (do not mutate quantities)
-    const priceChanges = current.priceChanges || {};
     const teams = await Team.find();
+    console.log(`Applying price changes to ${teams.length} teams`);
     await Promise.all(teams.map(async (team) => {
       const portfolio = team.portfolio || {};
       let totalValue = Number(portfolio.cash || 0);
       Object.keys(portfolio).forEach((asset) => {
         if (asset !== 'cash' && Number(portfolio[asset]) > 0) {
           const change = Number(priceChanges[asset] || 0);
-          totalValue += Number(portfolio[asset]) * (1 + change / 100);
+          const originalValue = Number(portfolio[asset]);
+          const newValue = originalValue * (1 + change / 100);
+          totalValue += newValue;
+          console.log(`Team ${team.name}: ${asset} ${originalValue} * (1 + ${change}/100) = ${newValue}, totalValue: ${totalValue}`);
         }
       });
       team.totalValue = totalValue;
+      console.log(`Team ${team.name} updated totalValue: ${team.totalValue}`);
       await team.save();
     }));
 
@@ -72,10 +81,15 @@ router.post('/end', async (req, res) => {
       .sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0))
       .map((t, idx) => ({ rank: idx + 1, teamName: t.name, portfolioValue: t.totalValue || 0 }));
     const io = req.app.get('io');
-    if (io) io.emit('leaderboard:update', leaderboard);
+    if (io) {
+      io.emit('leaderboard:update', leaderboard);
+      // Emit round update to inform clients that round has ended
+      io.emit('round:update', current);
+    }
 
     res.json({ round: current, leaderboard });
   } catch (err) {
+    console.error('Error ending round:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -101,12 +115,14 @@ router.post('/prices', async (req, res) => {
   try {
     const current = await Round.findOne({ status: 'active' });
     if (!current) return res.status(400).json({ message: 'No active round' });
+    console.log('Updating prices:', req.body.priceChanges);
     current.priceChanges = { ...current.priceChanges.toObject?.() || current.priceChanges, ...req.body.priceChanges };
     await current.save();
     const io = req.app.get('io');
     if (io) io.emit('prices', current.priceChanges);
     res.json(current.priceChanges);
   } catch (err) {
+    console.error('Error updating prices:', err);
     res.status(400).json({ message: err.message });
   }
 });

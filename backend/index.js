@@ -5,6 +5,9 @@ const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
+// Import models
+const Admin = require('./models/Admin');
+
 // Import routes
 const teamRoutes = require('./routes/teams');
 const roundRoutes = require('./routes/rounds');
@@ -29,7 +32,7 @@ app.use(express.json());
 app.set('io', io);
 
 // Routes
-app.get("/",(req,res) => {res.status(200).json({success:true,msg:"OK"})});
+app.get("/",(req,res) => {res.status(200).json({success:true,msg:200})})
 app.use('/api/teams', teamRoutes);
 app.use('/api/rounds', roundRoutes);
 app.use('/api/admin', adminRoutes);
@@ -84,6 +87,9 @@ async function start() {
     await mongoose.connect(mongoUri, { dbName: process.env.MONGO_DB || 'spend' })
     console.log('MongoDB connected')
 
+    // Create default admin user if it doesn't exist
+    await createDefaultAdmin();
+
     server.listen(port, () => {
       console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
       
@@ -93,6 +99,8 @@ async function start() {
       console.log(`- GET  /api/teams`);
       console.log(`- POST /api/teams/register`);
       console.log(`- POST /api/teams/login`);
+      console.log(`- POST /api/teams/:id/invest`);
+      console.log(`- POST /api/teams/:id/transfer`);
       console.log(`- GET  /api/teams/:id`);
       console.log(`- GET  /api/rounds/current`);
       console.log(`- POST /api/rounds`);
@@ -111,10 +119,29 @@ async function start() {
 
 start()
 
+// Create default admin user
+async function createDefaultAdmin() {
+  try {
+    const Admin = require('./models/Admin');
+    const adminExists = await Admin.findOne({ username: 'admin' });
+    if (!adminExists) {
+      const admin = new Admin({
+        username: 'admin',
+        password: 'admin123'
+      });
+      await admin.save();
+      console.log('Default admin user created: admin/admin123');
+    } else {
+      console.log('Admin user already exists');
+    }
+  } catch (err) {
+    console.error('Error creating default admin:', err);
+  }
+}
+
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Rejection:', err);
   // Close server & exit process
   server.close(() => process.exit(1));
 });
-export default app;

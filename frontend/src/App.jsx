@@ -7,7 +7,7 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound, setPriceChanges, setLeaderboard, pushNewsFromServer, applyRoundFromServer } from './store/gameState'
+import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound, setPriceChanges, setLeaderboard, pushNewsFromServer, applyRoundFromServer, startAuctionRound, awardAuctionItem, endAuctionRound, deductCash } from './store/gameState'
 import { setupRealtime } from './socket'
 import axios from 'axios'
 
@@ -21,7 +21,7 @@ function Home() {
     fd: ''
   })
   const [currentTeam, setCurrentTeam] = React.useState(null)
-  const [transfer, setTransfer] = React.useState({ from: 'cash', to: 'gold', amount: '' })
+  const [transfer, setTransfer] = React.useState({ from: 'cash', to: 'cash', amount: '' })
 
   React.useEffect(() => {
     // Get current team
@@ -30,6 +30,7 @@ function Home() {
     
     // Subscribe to game state changes
     const unsubscribe = subscribe((newState) => {
+      console.log('Home component received new state:', newState);
       setGameState(newState)
     })
     
@@ -131,16 +132,74 @@ function Home() {
         <div className="logo-section">
           <img src="/B&B logo.jpg" alt="B&B Logo" className="logo-image" />
           <div className="hud">
-            <div className="round">Round {gameState.currentRound}/5</div>
+            <div className="round">Round {gameState.isAuctionRound ? '5/5' : `${gameState.currentRound}/5`}</div>
             <div className="timer">{formatTime(gameState.timeRemaining)}</div>
             <div className={`round-status ${gameState.roundStatus}`}>
-              {gameState.roundStatus.toUpperCase()}
+              {gameState.isAuctionRound ? 'AUCTION' : gameState.roundStatus.toUpperCase()}
             </div>
           </div>
         </div>
       </header>
 
       <main className="home-main">
+        {/* Auction Round Display */}
+        {gameState.isAuctionRound && gameState.currentAuctionItem && (
+          <div style={{ 
+            backgroundColor: '#f3e8ff', 
+            padding: '20px', 
+            borderRadius: '8px', 
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '2px dashed #8b5cf6'
+          }}>
+            <h2 style={{ color: '#7e22ce', margin: '0 0 15px 0', fontSize: '24px' }}>🎉 AUCTION ROUND 🎉</h2>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              gap: '20px' 
+            }}>
+              <img 
+                src={gameState.currentAuctionItem.image} 
+                alt={gameState.currentAuctionItem.name} 
+                style={{ 
+                  width: '200px', 
+                  height: '200px', 
+                  objectFit: 'cover', 
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }} 
+              />
+              <div>
+                <h3 style={{ 
+                  margin: '0 0 10px 0', 
+                  fontSize: '20px',
+                  color: '#4b5563'
+                }}>
+                  {gameState.currentAuctionItem.name}
+                </h3>
+                <div style={{ 
+                  color: '#dc2626', 
+                  fontWeight: 'bold', 
+                  fontSize: '28px',
+                  margin: '10px 0',
+                  letterSpacing: '1px'
+                }}>
+                  ₹{gameState.currentAuctionItem.price.toLocaleString('en-IN')}
+                </div>
+                <p style={{ 
+                  color: '#6b7280', 
+                  margin: '10px 0',
+                  fontSize: '16px',
+                  maxWidth: '500px'
+                }}>
+                  This luxury item is being auctioned offline. The winning team will have this amount deducted from their cash balance.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <section className="home-content">
           <div className="investments-section">
             <div className="investments-card">
@@ -155,7 +214,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.gold}
                       onChange={e => handleInvestmentChange('gold', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     />
                   </div>
                   <div className="investment-item">
@@ -166,7 +225,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.crypto}
                       onChange={e => handleInvestmentChange('crypto', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     />
                   </div>
                   <div className="investment-item">
@@ -177,7 +236,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.stocks}
                       onChange={e => handleInvestmentChange('stocks', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     />
                   </div>
                   <div className="investment-item">
@@ -188,7 +247,7 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.realEstate}
                       onChange={e => handleInvestmentChange('realEstate', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     />
                   </div>
                   <div className="investment-item">
@@ -199,11 +258,11 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$" 
                       value={investments.fd}
                       onChange={e => handleInvestmentChange('fd', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     />
                   </div>
                 </div>
-                <button className="primary submit-btn" type="submit" disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}>Submit Investments</button>
+                <button className="primary submit-btn" type="submit" disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}>Submit Investments</button>
               </form>
             </div>
             <div className="investments-card" style={{ marginTop: 16 }}>
@@ -215,7 +274,7 @@ function Home() {
                     <select className="investment-amount"
                       value={transfer.from}
                       onChange={e => handleTransferChange('from', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     >
                       <option value="cash">Cash</option>
                       <option value="gold">Gold</option>
@@ -230,14 +289,9 @@ function Home() {
                     <select className="investment-amount"
                       value={transfer.to}
                       onChange={e => handleTransferChange('to', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     >
                       <option value="cash">Cash</option>
-                      <option value="gold">Gold</option>
-                      <option value="crypto">Crypto</option>
-                      <option value="stocks">Stock Market</option>
-                      <option value="realEstate">Real Estate</option>
-                      <option value="fd">FD</option>
                     </select>
                   </div>
                   <div className="investment-item">
@@ -248,12 +302,12 @@ function Home() {
                       type="text" inputMode="decimal" pattern="^[0-9]*\.?[0-9]+$"
                       value={transfer.amount}
                       onChange={e => handleTransferChange('amount', e.target.value)}
-                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                      disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                     />
                   </div>
                 </div>
                 <button className="primary submit-btn" type="submit"
-                  disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0}
+                  disabled={gameState.roundStatus !== 'active' || (gameState.timeRemaining || 0) <= 0 || gameState.isAuctionRound}
                 >Transfer</button>
               </form>
             </div>
@@ -327,6 +381,66 @@ function Home() {
                   <span className="portfolio-label">Cash Left:</span>
                   <span className="portfolio-value">{formatCurrency(portfolio.cash)}</span>
                 </div>
+                
+                {/* Display auction items if any */}
+                {portfolio.auctionItems && portfolio.auctionItems.length > 0 && (
+                  <div className="portfolio-item">
+                    <span className="portfolio-label">Auction Items:</span>
+                    <div style={{ gridColumn: 'span 2', marginTop: '10px' }}>
+                      {portfolio.auctionItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '15px', 
+                          padding: '12px', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '6px', 
+                          marginBottom: '12px',
+                          backgroundColor: '#f9fafb'
+                        }}>
+                          <img 
+                            src={item.image} 
+                            alt={item.name} 
+                            style={{ 
+                              width: '50px', 
+                              height: '50px', 
+                              objectFit: 'cover', 
+                              borderRadius: '4px',
+                              border: '1px solid #e5e7eb'
+                            }} 
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ 
+                              fontSize: '15px', 
+                              fontWeight: '500',
+                              color: '#1f2937'
+                            }}>
+                              {item.name}
+                            </div>
+                            <div style={{ 
+                              fontSize: '14px', 
+                              color: '#ef4444',
+                              fontWeight: '600'
+                            }}>
+                              ₹{item.price.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                          <div style={{ 
+                            fontSize: '12px', 
+                            color: '#10b981',
+                            fontWeight: '600',
+                            padding: '4px 8px',
+                            backgroundColor: '#ecfdf5',
+                            borderRadius: '4px'
+                          }}>
+                            OWNED
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="portfolio-item total">
                   <span className="portfolio-label">Total Value:</span>
                   <span className="portfolio-value">{formatCurrency(teamData?.totalValue || 500000)}</span>
@@ -375,19 +489,114 @@ function AdminPanel({ onBackToLanding }) {
     realEstate: gameState.priceChanges.realEstate,
     fd: gameState.priceChanges.fd
   })
+  const [selectedAuctionItem, setSelectedAuctionItem] = React.useState('')
+  const [winningTeam, setWinningTeam] = React.useState('')
+  const [deductionAmount, setDeductionAmount] = React.useState('') // New state for deduction amount
+
+  // Prebuilt news data for each round
+  const prebuiltNews = {
+    1: [
+      { title: "RBI cuts repo rate by 1% to boost growth", content: "The Reserve Bank of India has announced a 1% cut in the repo rate to stimulate economic growth and boost investor confidence." },
+      { title: "OPEC announces sharp oil production cut", content: "OPEC member countries have agreed to significantly reduce oil production, potentially affecting global energy prices." },
+      { title: "Bitcoin legalized for payments in all top countries of BRICS", content: "Major BRICS nations have legalized Bitcoin for commercial transactions, boosting cryptocurrency adoption globally." },
+      { title: "Major Indian IT company posts record quarterly profits", content: "One of India's leading IT companies has reported record-breaking quarterly profits, signaling strong growth in the technology sector." }
+    ],
+    2: [
+      { title: "New pro-business government elected with reforms agenda in INDIA and USA creating history", content: "Pro-business governments have been elected in both India and the USA, promising significant economic reforms and business-friendly policies." },
+      { title: "Civil war burst in country's top religion results in curfew area and lockdown announced", content: "A civil conflict has erupted in a region with religious significance, leading to curfews and lockdowns that may impact regional markets." },
+      { title: "Gold prices surge globally as investors rush to safe assets", content: "Global gold prices have surged as investors seek safe-haven assets amid geopolitical tensions and economic uncertainty." },
+      { title: "U.S. Fed hikes interest rates sharply", content: "The U.S. Federal Reserve has implemented a sharp interest rate hike to combat inflation, potentially affecting global markets." }
+    ],
+    3: [
+      { title: "India launches Digital Rupee (CBDC)", content: "India has officially launched its Central Bank Digital Currency (CBDC), the Digital Rupee, marking a significant step in financial digitization." },
+      { title: "Global recession fears rise", content: "Economic indicators suggest increasing likelihood of a global recession, causing market volatility and investor caution." },
+      { title: "AI boom drives record growth in Indian tech sector", content: "The artificial intelligence boom has driven record growth in India's technology sector, with several startups achieving unicorn status." },
+      { title: "Large corporate fraud exposed in top Indian company", content: "A major corporate fraud has been uncovered in one of India's leading companies, leading to regulatory investigations and market concerns." }
+    ],
+    4: [
+      { title: "FTX the Major crypto exchange of USA collapses", content: "FTX, one of the world's largest cryptocurrency exchanges, has collapsed amid allegations of mismanagement and fund misappropriation." },
+      { title: "Government announces ₹10 lakh crore infrastructure push", content: "The Indian government has announced a massive ₹10 lakh crore infrastructure development plan to boost economic growth and employment." },
+      { title: "Peace deal ends war in Europe, global optimism rises", content: "A peace agreement has been signed to end a major conflict in Europe, leading to increased global optimism and market stability." },
+      { title: "RBI increases repo rate by 0.5% to fight inflation", content: "The Reserve Bank of India has increased the repo rate by 0.5% to combat rising inflation and stabilize the economy." }
+    ],
+    5: [
+      { title: "Major foreign company announces $10B investment in India", content: "A leading multinational corporation has announced a $10 billion investment in India, signaling strong confidence in the Indian economy." },
+      { title: "Rupee hits record low against US Dollar", content: "The Indian Rupee has hit a record low against the US Dollar, affecting import costs and foreign investment flows." },
+      { title: "India bans private cryptocurrencies", content: "The Indian government has announced a ban on private cryptocurrencies, promoting the use of the official Digital Rupee." },
+      { title: "Government waives corporate taxes for startups", content: "The government has announced a waiver of corporate taxes for eligible startups to promote innovation and entrepreneurship." }
+    ]
+  }
 
   React.useEffect(() => {
     const unsubscribe = subscribe((newState) => {
+      console.log('AdminPanel received new state:', newState);
       setGameState(newState)
       setRoundData({
         round: newState.currentRound,
         duration: newState.roundDuration,
         status: newState.roundStatus
       })
+      
+      // Reset price data when round ends
+      if (newState.roundStatus === 'ended') {
+        console.log('Round ended, resetting price data')
+        setPriceData({
+          gold: 0,
+          crypto: 0,
+          stocks: 0,
+          realEstate: 0,
+          fd: 0
+        })
+      }
+      
+      // Automatically select the first auction item when auction round starts
+      if (newState.isAuctionRound && !selectedAuctionItem && newState.auctionItems && newState.auctionItems.length > 0) {
+        setSelectedAuctionItem(newState.auctionItems[0].id);
+      }
+      
+      // Log when currentAuctionItem changes
+      console.log('AdminPanel currentAuctionItem:', newState.currentAuctionItem);
     })
     
-    return unsubscribe
-  }, [])
+    // Listen for round ended event to reset price data
+    const handleRoundEnded = () => {
+      console.log('Round ended event received, resetting price data')
+      setPriceData({
+        gold: 0,
+        crypto: 0,
+        stocks: 0,
+        realEstate: 0,
+        fd: 0
+      })
+    }
+    
+    // Listen for auction ended event
+    const handleAuctionEnded = () => {
+      console.log('Auction ended event received');
+      // Force a re-render by updating the game state
+      const currentGameState = getState();
+      console.log('Setting game state with isAuctionRound: false');
+      setGameState({ ...currentGameState });
+    }
+    
+    // Listen for general state updates
+    const handleStateUpdate = () => {
+      console.log('State update event received');
+      const currentGameState = getState();
+      setGameState({ ...currentGameState });
+    }
+    
+    window.addEventListener('roundEnded', handleRoundEnded)
+    window.addEventListener('auctionEnded', handleAuctionEnded)
+    window.addEventListener('stateUpdate', handleStateUpdate)
+    
+    return () => {
+      unsubscribe()
+      window.removeEventListener('roundEnded', handleRoundEnded)
+      window.removeEventListener('auctionEnded', handleAuctionEnded)
+      window.removeEventListener('stateUpdate', handleStateUpdate)
+    }
+  })
 
   React.useEffect(() => {
     if (activeTab === 'prices') {
@@ -414,6 +623,20 @@ function AdminPanel({ onBackToLanding }) {
     setNewsData({ title: '', content: '' })
   }
 
+  // Function to publish all prebuilt news for the current round
+  function handlePublishRoundNews() {
+    const currentRound = gameState.currentRound;
+    const newsForRound = prebuiltNews[currentRound] || [];
+    
+    // Publish all news items for the current round
+    newsForRound.forEach(newsItem => {
+      // Add a small delay between publishing each news item to simulate real-time publishing
+      setTimeout(() => {
+        addNews(newsItem)
+      }, 100)
+    })
+  }
+
   function handlePriceSubmit(e) {
     e.preventDefault()
     updatePrices(priceData)
@@ -421,6 +644,67 @@ function AdminPanel({ onBackToLanding }) {
 
   function handleEndRound() {
     endRound()
+  }
+
+  // Function to start auction round
+  function handleStartAuction() {
+    startAuctionRound()
+    // Automatically select the first auction item in the dropdown
+    if (gameState.auctionItems && gameState.auctionItems.length > 0) {
+      setSelectedAuctionItem(gameState.auctionItems[0].id);
+    }
+  }
+
+  // Function to end auction round
+  function handleEndAuction() {
+    console.log('handleEndAuction called');
+    endAuctionRound()
+    // Force an immediate state update
+    setTimeout(() => {
+      const newState = getState();
+      console.log('Forcing state update after endAuctionRound:', newState);
+      setGameState({ ...newState });
+    }, 200);
+  }
+
+  // Function to award auction item to a team
+  function handleAwardItem() {
+    if (selectedAuctionItem && winningTeam) {
+      awardAuctionItem(winningTeam, selectedAuctionItem)
+      
+      // Automatically select the next auction item
+      const currentIndex = gameState.auctionItems.findIndex(item => item.id === selectedAuctionItem);
+      if (currentIndex !== -1 && currentIndex < gameState.auctionItems.length - 1) {
+        // Select the next item
+        setSelectedAuctionItem(gameState.auctionItems[currentIndex + 1].id);
+      } else if (gameState.auctionItems.length > 0) {
+        // If we were at the last item, select the first item
+        setSelectedAuctionItem(gameState.auctionItems[0].id);
+      } else {
+        // No items left
+        setSelectedAuctionItem('');
+      }
+      
+      setWinningTeam('')
+      
+      // Show success message
+      alert(`Item awarded to ${winningTeam} successfully!`)
+    }
+  }
+
+  // Function to deduct cash from a team
+  function handleDeductCash() {
+    if (deductionAmount && winningTeam) {
+      const amount = parseFloat(deductionAmount);
+      if (amount > 0) {
+        deductCash(winningTeam, amount);
+        setDeductionAmount('');
+        // Show success message
+        alert(`₹${amount.toLocaleString('en-IN')} deducted from ${winningTeam} successfully!`);
+      } else {
+        alert('Please enter a valid amount');
+      }
+    }
   }
 
   function formatTime(seconds) {
@@ -505,9 +789,143 @@ function AdminPanel({ onBackToLanding }) {
               </button>
               <button onClick={handleEndRound} className="admin-btn" style={{ background: '#ef4444' }}>
                 End Round & Apply Price Changes
-        </button>
+              </button>
+              {/* Auction Round Buttons */}
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}>
+                  Auction Round Status: {gameState.isAuctionRound ? 'Active' : 'Inactive'}
+                </div>
+                {!gameState.isAuctionRound ? (
+                  <button onClick={handleStartAuction} className="admin-btn" style={{ background: '#8b5cf6' }}>
+                    Start Auction Round
+                  </button>
+                ) : (
+                  <button onClick={handleEndAuction} className="admin-btn" style={{ background: '#ef4444' }}>
+                    End Auction Round
+                  </button>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Auction Management Section */}
+          {gameState.isAuctionRound && (
+            <div className="admin-card">
+              <h3>Auction Management</h3>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Select Auction Item</label>
+                <select
+                  value={selectedAuctionItem}
+                  onChange={e => {
+                    const itemId = e.target.value;
+                    console.log('Selected auction item changed to:', itemId);
+                    setSelectedAuctionItem(itemId);
+                    // Automatically set as current item when selected
+                    console.log('Setting current auction item to:', itemId);
+                    setCurrentAuctionItem(itemId);
+                  }}
+                  className="admin-form-input"
+                >
+                  <option value="">Select an item</option>
+                  {gameState.auctionItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} (₹{item.price.toLocaleString('en-IN')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button 
+                  onClick={handleAwardItem} 
+                  className="admin-btn" 
+                  style={{ background: '#f59e0b' }}
+                  disabled={!selectedAuctionItem || !winningTeam}
+                >
+                  Award Item to Team
+                </button>
+              </div>
+              
+              {/* Cash Deduction Section */}
+              <div className="admin-form-group" style={{ marginTop: '20px' }}>
+                <h4>Deduct Cash from Team</h4>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'end' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="admin-form-label">Amount (₹)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={deductionAmount}
+                      onChange={e => setDeductionAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
+                      className="admin-form-input"
+                      placeholder="Enter amount"
+                    />
+                  </div>
+                  
+                  <div style={{ flex: 2 }}>
+                    <label className="admin-form-label">Select Team</label>
+                    <select
+                      value={winningTeam}
+                      onChange={e => setWinningTeam(e.target.value)}
+                      className="admin-form-input"
+                    >
+                      <option value="">Select a team</option>
+                      {gameState.teams.map(team => (
+                        <option key={team.name} value={team.name}>
+                          {team.name} (Cash: ₹{team.portfolio.cash.toLocaleString('en-IN')})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <button 
+                    onClick={handleDeductCash} 
+                    className="admin-btn" 
+                    style={{ background: '#ef4444', height: 'fit-content', marginTop: 'auto' }}
+                    disabled={!deductionAmount || !winningTeam}
+                  >
+                    Deduct Cash
+                  </button>
+                </div>
+              </div>
+              
+              <div className="admin-form-group" style={{ marginTop: '15px' }}>
+                <label className="admin-form-label">Select Winning Team for Auction Item</label>
+                <select
+                  value={winningTeam}
+                  onChange={e => setWinningTeam(e.target.value)}
+                  className="admin-form-input"
+                >
+                  <option value="">Select a team</option>
+                  {gameState.teams.map(team => (
+                    <option key={team.name} value={team.name}>
+                      {team.name} (Cash: ₹{team.portfolio.cash.toLocaleString('en-IN')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Display current auction item if set */}
+              {gameState.currentAuctionItem && (
+                <div style={{ marginTop: '20px', padding: '15px', border: '1px solid #e5e7eb', borderRadius: '4px' }}>
+                  <h4>Current Auction Item</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <img 
+                      src={gameState.currentAuctionItem.image} 
+                      alt={gameState.currentAuctionItem.name} 
+                      style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px' }} 
+                    />
+                    <div>
+                      <div style={{ fontWeight: '600' }}>{gameState.currentAuctionItem.name}</div>
+                      <div style={{ color: '#ef4444', fontWeight: '600', fontSize: '18px' }}>
+                        ₹{gameState.currentAuctionItem.price.toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="admin-card">
             <h3>Round Status</h3>
@@ -524,6 +942,12 @@ function AdminPanel({ onBackToLanding }) {
                 <span className="status-label">Status:</span>
                 <span className="status-value">{gameState.roundStatus}</span>
               </div>
+              {gameState.isAuctionRound && (
+                <div className="status-item">
+                  <span className="status-label">Auction Round:</span>
+                  <span className="status-value" style={{ color: '#8b5cf6' }}>Active</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -555,6 +979,44 @@ function AdminPanel({ onBackToLanding }) {
               </div>
               <button type="submit" className="admin-btn">Publish News</button>
             </form>
+            
+            {/* Prebuilt News Section */}
+            <div className="admin-form-group" style={{ marginTop: '20px' }}>
+              <h4>Prebuilt News for Round {gameState.currentRound}</h4>
+              <button 
+                type="button" 
+                className="admin-btn" 
+                style={{ background: '#3b82f6', marginTop: '10px' }}
+                onClick={handlePublishRoundNews}
+              >
+                Publish All Round {gameState.currentRound} News
+              </button>
+              
+              {/* Display prebuilt news for current round */}
+              <div className="prebuilt-news-list" style={{ marginTop: '15px' }}>
+                {(prebuiltNews[gameState.currentRound] || []).map((newsItem, index) => (
+                  <div key={index} className="prebuilt-news-item" style={{ 
+                    padding: '10px', 
+                    border: '1px solid #e5e7eb', 
+                    borderRadius: '4px', 
+                    marginBottom: '10px' 
+                  }}>
+                    <div className="prebuilt-news-title" style={{ 
+                      fontWeight: '600', 
+                      marginBottom: '5px' 
+                    }}>
+                      {newsItem.title}
+                    </div>
+                    <div className="prebuilt-news-content" style={{ 
+                      fontSize: '14px', 
+                      color: '#6b7280' 
+                    }}>
+                      {newsItem.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="admin-card">
