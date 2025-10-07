@@ -33,6 +33,12 @@ router.post('/', async (req, res) => {
       news: []
     });
 
+    // Emit round update to inform all clients about the new round
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('round:update', newRound);
+    }
+
     res.status(201).json(newRound);
   } catch (err) {
     res.status(400).json({ message: err.message });

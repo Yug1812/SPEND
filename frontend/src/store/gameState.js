@@ -502,6 +502,16 @@ export function applyRoundFromServer(round) {
     roundStatus: String(round.status || '').toLowerCase() || gameState.roundStatus
   }
   
+  // Handle auction round specifically
+  if (round.isAuctionRound !== undefined) {
+    updates.isAuctionRound = Boolean(round.isAuctionRound);
+  }
+  
+  // Handle current auction item
+  if (round.currentAuctionItem) {
+    updates.currentAuctionItem = round.currentAuctionItem;
+  }
+  
   // If round is ended, reset timer
   if (round.status === 'ended') {
     console.log('Round ended, resetting price changes and refreshing teams')
@@ -615,11 +625,16 @@ export function startPollingTeams() {
 // Fetch teams from backend and sync to local store
 export async function initializeTeams() {
   try {
-    console.log('Initializing teams, current price changes:', gameState.priceChanges, 'round status:', gameState.roundStatus)
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/teams`)
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    console.log('Initializing teams, API URL:', apiUrl);
+    console.log('Current price changes:', gameState.priceChanges, 'round status:', gameState.roundStatus);
+    
+    const response = await fetch(`${apiUrl}/api/teams`);
+    console.log('Teams API response status:', response.status);
+    
     if (response.ok) {
-      const teams = await response.json()
-      console.log('Received teams data:', teams)
+      const teams = await response.json();
+      console.log('Received teams data:', teams);
       // Apply current price changes to calculate updated total values
       // But only if the totalValue hasn't been updated by the backend (e.g., after round end)
       const teamsWithUpdatedValues = teams.map(team => {
@@ -634,7 +649,7 @@ export async function initializeTeams() {
                             (gameState.timeRemaining !== undefined && gameState.timeRemaining <= 0);
         
         if (isRoundEnded && team.totalValue && team.totalValue !== 500000) {
-          console.log(`Using backend-calculated totalValue for team ${team.name}:`, team.totalValue)
+          console.log(`Using backend-calculated totalValue for team ${team.name}:`, team.totalValue);
           // Use the backend-calculated totalValue
           return {
             ...team
@@ -659,7 +674,7 @@ export async function initializeTeams() {
           });
         }
         
-        console.log(`Calculated totalValue for team ${team.name}:`, totalValue)
+        console.log(`Calculated totalValue for team ${team.name}:`, totalValue);
         return {
           ...team,
           totalValue
@@ -667,9 +682,12 @@ export async function initializeTeams() {
       })
       setState({ teams: teamsWithUpdatedValues || [] })
       updateLeaderboard()
+    } else {
+      console.warn('Failed to fetch teams from backend:', response.status, response.statusText);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
   } catch (err) {
-    console.warn('Failed to fetch teams from backend:', err)
+    console.warn('Failed to fetch teams from backend:', err);
     // Fallback to localStorage
     const existingTeams = JSON.parse(localStorage.getItem('spend.teams') || '[]')
     existingTeams.forEach(team => {
@@ -888,47 +906,115 @@ export function deductCash(teamName, amount) {
 
 // Start auction round
 export function startAuctionRound() {
-  // Automatically select the first auction item when starting the auction round
-  const firstAuctionItem = gameState.auctionItems && gameState.auctionItems.length > 0 ? gameState.auctionItems[0] : null;
-  
-  setState({
-    isAuctionRound: true,
-    currentAuctionItem: firstAuctionItem,
-    roundStatus: 'active',
-    timeRemaining: 300 // 5 minutes for auction round
+  // Call backend endpoint to start auction round
+  fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/admin/auction/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-auth-token': localStorage.getItem('spend.admin.token') || ''
+    }
   })
-  startRoundTimer()
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  })
+  .then(data => {
+    console.log('Auction round started:', data);
+    // The actual state update will happen via Socket.IO event
+  })
+  .catch(err => {
+    console.error('Failed to start auction round:', err);
+    // Fallback to local update if backend fails
+    const firstAuctionItem = gameState.auctionItems && gameState.auctionItems.length > 0 ? gameState.auctionItems[0] : null;
+    
+    setState({
+      isAuctionRound: true,
+      currentAuctionItem: firstAuctionItem,
+      roundStatus: 'active',
+      timeRemaining: 300 // 5 minutes for auction round
+    })
+    startRoundTimer()
+  })
 }
 
 // Set current auction item
 export function setCurrentAuctionItem(itemId) {
   console.log('setCurrentAuctionItem called with itemId:', itemId);
-  const item = gameState.auctionItems.find(item => item.id === itemId)
-  console.log('Found item:', item);
-  if (item) {
-    console.log('Setting current auction item to:', item);
-    setState({ currentAuctionItem: item })
-  } else {
-    console.log('Item not found, clearing current auction item');
-    setState({ currentAuctionItem: null })
-  }
+  
+  // Call backend endpoint to set current auction item
+  fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/admin/auction/set-item`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-auth-token': localStorage.getItem('spend.admin.token') || ''
+    },
+    body: JSON.stringify({ itemId })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  })
+  .then(data => {
+    console.log('Current auction item set:', data);
+    // The actual state update will happen via Socket.IO event
+  })
+  .catch(err => {
+    console.error('Failed to set current auction item:', err);
+    // Fallback to local update if backend fails
+    const item = gameState.auctionItems.find(item => item.id === itemId)
+    console.log('Found item:', item);
+    if (item) {
+      console.log('Setting current auction item to:', item);
+      setState({ currentAuctionItem: item })
+    } else {
+      console.log('Item not found, clearing current auction item');
+      setState({ currentAuctionItem: null })
+    }
+  })
 }
 
 // End auction round
 export function endAuctionRound() {
   console.log('Ending auction round, current state:', gameState);
-  setState({
-    isAuctionRound: false,
-    currentAuctionItem: null,
-    roundStatus: 'ended'
-  })
-  clearRoundTimer()
   
-  // Emit a custom event to notify the admin panel
-  if (typeof window !== 'undefined' && window.dispatchEvent) {
-    window.dispatchEvent(new CustomEvent('auctionEnded'));
-    // Also dispatch a general state update event
-    window.dispatchEvent(new CustomEvent('stateUpdate'));
-  }
-  console.log('Auction round ended, new state:', { isAuctionRound: false, roundStatus: 'ended' });
+  // Call backend endpoint to end auction round
+  fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/admin/auction/end`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-auth-token': localStorage.getItem('spend.admin.token') || ''
+    }
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  })
+  .then(data => {
+    console.log('Auction round ended:', data);
+    // The actual state update will happen via Socket.IO event
+  })
+  .catch(err => {
+    console.error('Failed to end auction round:', err);
+    // Fallback to local update if backend fails
+    setState({
+      isAuctionRound: false,
+      currentAuctionItem: null,
+      roundStatus: 'ended'
+    })
+    clearRoundTimer()
+    
+    // Emit a custom event to notify the admin panel
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('auctionEnded'));
+      // Also dispatch a general state update event
+      window.dispatchEvent(new CustomEvent('stateUpdate'));
+    }
+    console.log('Auction round ended, new state:', { isAuctionRound: false, roundStatus: 'ended' });
+  })
 }

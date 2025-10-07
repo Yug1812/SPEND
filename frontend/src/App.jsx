@@ -7,8 +7,8 @@ import AdminLoginPage from './pages/AdminLogin'
 import './pages/team.css'
 import './pages/landing.css'
 import './pages/admin.css'
-import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound, setPriceChanges, setLeaderboard, pushNewsFromServer, applyRoundFromServer, startAuctionRound, awardAuctionItem, endAuctionRound, deductCash } from './store/gameState'
-import { setupRealtime } from './socket'
+import { subscribe, getState, initializeTeams, startPollingTeams, stopPollingTeams, updateTeamInStore, updateRound, startRound, addNews, deleteNews, updatePrices, updateTeamPortfolio, transferFunds, recalculateAllPortfolios, endRound, setPriceChanges, setLeaderboard, pushNewsFromServer, applyRoundFromServer, startAuctionRound, awardAuctionItem, endAuctionRound, deductCash, setCurrentAuctionItem } from './store/gameState'
+import { setupRealtime, getSocket } from './socket'
 import axios from 'axios'
 
 function Home() {
@@ -169,6 +169,10 @@ function Home() {
                   borderRadius: '12px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                 }} 
+                onError={(e) => {
+                  e.target.src = '/placeholder-image.png'; // Fallback image
+                  console.error('Failed to load auction item image:', gameState.currentAuctionItem.image);
+                }}
               />
               <div>
                 <h3 style={{ 
@@ -195,6 +199,24 @@ function Home() {
                 }}>
                   This luxury item is being auctioned offline. The winning team will have this amount deducted from their cash balance.
                 </p>
+                {/* Display team's current cash */}
+                {teamData && (
+                  <div style={{ 
+                    marginTop: '15px',
+                    padding: '10px',
+                    backgroundColor: '#e0f2fe',
+                    borderRadius: '6px',
+                    border: '1px solid #0ea5e9'
+                  }}>
+                    <div style={{ 
+                      fontWeight: '600',
+                      color: '#0c4a6e',
+                      fontSize: '16px'
+                    }}>
+                      Your Team's Cash: ₹{teamData.portfolio.cash.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -672,6 +694,19 @@ function AdminPanel({ onBackToLanding }) {
     if (selectedAuctionItem && winningTeam) {
       awardAuctionItem(winningTeam, selectedAuctionItem)
       
+      // Emit socket event to notify all teams
+      const item = gameState.auctionItems.find(item => item.id === selectedAuctionItem);
+      if (item) {
+        const socket = getSocket();
+        if (socket) {
+          socket.emit('auction:win', {
+            teamName: winningTeam,
+            itemName: item.name,
+            itemPrice: item.price
+          });
+        }
+      }
+      
       // Automatically select the next auction item
       const currentIndex = gameState.auctionItems.findIndex(item => item.id === selectedAuctionItem);
       if (currentIndex !== -1 && currentIndex < gameState.auctionItems.length - 1) {
@@ -914,6 +949,10 @@ function AdminPanel({ onBackToLanding }) {
                       src={gameState.currentAuctionItem.image} 
                       alt={gameState.currentAuctionItem.name} 
                       style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px' }} 
+                      onError={(e) => {
+                        e.target.src = '/placeholder-image.png'; // Fallback image
+                        console.error('Failed to load auction item image:', gameState.currentAuctionItem.image);
+                      }}
                     />
                     <div>
                       <div style={{ fontWeight: '600' }}>{gameState.currentAuctionItem.name}</div>
@@ -1299,7 +1338,44 @@ export default function App() {
       onPrices: (prices) => setPriceChanges(prices),
       onNews: (news) => pushNewsFromServer(news),
       onLeaderboard: (lb) => setLeaderboard(lb),
-      onRound: (round) => applyRoundFromServer(round)
+      onRound: (round) => applyRoundFromServer(round),
+      onAuctionStart: (data) => {
+        console.log('Handling auction start event in App:', data);
+        // Update local state when auction starts
+        applyRoundFromServer({
+          isAuctionRound: true,
+          roundStatus: 'active',
+          roundNumber: 5, // Auction round
+          timeRemaining: data.timeRemaining || 300 // 5 minutes
+        });
+      },
+      onAuctionEnd: (data) => {
+        console.log('Handling auction end event in App:', data);
+        // Update local state when auction ends
+        applyRoundFromServer({
+          isAuctionRound: false,
+          roundStatus: 'ended',
+          currentAuctionItem: null
+        });
+      },
+      onAuctionSetItem: (data) => {
+        console.log('Handling auction set item event in App:', data);
+        // Update current auction item
+        const gameState = getState();
+        const item = gameState.auctionItems.find(item => item.id === data.itemId);
+        if (item) {
+          applyRoundFromServer({
+            currentAuctionItem: item
+          });
+        }
+      },
+      onAuctionWin: (data) => {
+        console.log('Handling auction win event in App:', data);
+        // Show notification to all teams
+        if (data.teamName && data.itemName) {
+          alert(`Team ${data.teamName} has won the ${data.itemName}!`);
+        }
+      }
     })
   }, [])
   const [showAdmin, setShowAdmin] = React.useState(false)

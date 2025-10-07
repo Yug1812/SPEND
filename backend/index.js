@@ -13,6 +13,9 @@ const teamRoutes = require('./routes/teams');
 const roundRoutes = require('./routes/rounds');
 const adminRoutes = require('./routes/admin');
 
+// Import helper functions
+const { getCurrentRound } = require('./routes/rounds');
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -25,7 +28,9 @@ const io = socketIo(server, {
 // MongoDB connection is initialized in start()
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173'
+}));
 app.use(express.json());
 
 // Make io available to routes
@@ -51,19 +56,8 @@ io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   
   // Send current game state to newly connected client
-  const { getCurrentRound } = require('./routes/rounds');
-  const currentRound = getCurrentRound();
-  if (currentRound) {
-    socket.emit('round:update', currentRound);
-    
-    // Send latest news if any
-    if (currentRound.news && currentRound.news.length > 0) {
-      socket.emit('news', currentRound.news[currentRound.news.length - 1]);
-    }
-    
-    // Send latest prices
-    socket.emit('prices', currentRound.priceChanges);
-  }
+  // We'll emit the current round data when it's updated elsewhere
+  // This avoids circular dependency issues
   
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
@@ -83,15 +77,17 @@ app.use((err, req, res, next) => {
 const port = process.env.PORT || 4000;
 async function start() {
   try {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/spend'
-    await mongoose.connect(mongoUri, { dbName: process.env.MONGO_DB || 'spend' })
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/spend'
+    await mongoose.connect(mongoUri)
     console.log('MongoDB connected')
 
     // Create default admin user if it doesn't exist
     await createDefaultAdmin();
 
-    server.listen(port, () => {
+    // Bind to localhost only instead of all network interfaces
+    server.listen(port, 'localhost', () => {
       console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
+      console.log(`Accessible at http://localhost:${port}`);
       
       // Log available routes
       console.log('Available routes:');

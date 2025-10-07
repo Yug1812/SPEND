@@ -83,6 +83,61 @@ router.get('/dashboard', (req, res) => {
   }
 });
 
+// Start auction round
+router.post('/auction/start', (req, res) => {
+  try {
+    const io = req.app.get('io');
+    if (io) {
+      // Emit event to all clients to start auction round
+      io.emit('auction:start', { 
+        isAuctionRound: true,
+        timeRemaining: 300 // 5 minutes for auction round
+      });
+      res.json({ message: 'Auction round started' });
+    } else {
+      res.status(500).json({ message: 'Socket.IO not available' });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// End auction round
+router.post('/auction/end', (req, res) => {
+  try {
+    const io = req.app.get('io');
+    if (io) {
+      // Emit event to all clients to end auction round
+      io.emit('auction:end', { 
+        isAuctionRound: false,
+        roundStatus: 'ended'
+      });
+      res.json({ message: 'Auction round ended' });
+    } else {
+      res.status(500).json({ message: 'Socket.IO not available' });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Set current auction item
+router.post('/auction/set-item', (req, res) => {
+  try {
+    const { itemId } = req.body;
+    const io = req.app.get('io');
+    if (io && itemId) {
+      // Emit event to all clients to set current auction item
+      io.emit('auction:set-item', { itemId });
+      res.json({ message: 'Current auction item set' });
+    } else {
+      res.status(400).json({ message: 'Item ID is required' });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Reset game (for development/testing)
 router.post('/reset', (req, res) => {
   try {
